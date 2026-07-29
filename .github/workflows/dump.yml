@@ -1,0 +1,79 @@
+name: Dump Firmware with DumprX
+
+on:
+  workflow_dispatch:
+    inputs:
+      firmware_url:
+        description: 'Firmware link (direct link / mega.nz / mediafire / gdrive / androidfilehost)'
+        required: true
+        type: string
+
+# Prevent two dumps from running at once and filling up disk
+concurrency:
+  group: dumprx
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350   # large firmware dumps can take a while; default job limit is 360 minutes
+
+    steps:
+      - name: Free up runner disk space (make room for the firmware)
+        run: |
+          echo "Before cleanup:"
+          df -h /
+
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/local/share/boost
+          sudo docker image prune --all --force || true
+
+          echo "After cleanup:"
+          df -h /
+
+      - name: Clone DumprX
+        run: |
+          git clone --depth=1 https://github.com/DumprX/DumprX.git
+          cd DumprX
+          echo "DUMPRX_DIR=$(pwd)" >> "$GITHUB_ENV"
+
+      - name: Run setup.sh (install dependencies)
+        working-directory: ${{ env.DUMPRX_DIR }}
+        run: |
+          chmod +x setup.sh dumper.sh
+          sudo ./setup.sh
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "heybyben"
+          git config --global user.email "heybyben@gmail.com"
+
+      - name: Set up upload credentials (GitHub token & org)
+        working-directory: ${{ env.DUMPRX_DIR }}
+        env:
+          GH_TOKEN_SECRET: ${{ secrets.DUMPER_GH_TOKEN }}
+          GH_ORGNAME_SECRET: ${{ secrets.DUMPER_GH_ORGNAME }}
+          TG_TOKEN_SECRET: ${{ secrets.DUMPER_TG_TOKEN }}
+          TG_CHAT_SECRET: ${{ secrets.DUMPER_TG_CHAT }}
+        run: |
+          if [ -n "$GH_TOKEN_SECRET" ]; then
+            echo "$GH_TOKEN_SECRET" > .github_token
+          fi
+          if [ -n "$GH_ORGNAME_SECRET" ]; then
+            echo "$GH_ORGNAME_SECRET" > .github_orgname
+          fi
+          if [ -n "$TG_TOKEN_SECRET" ]; then
+            echo "$TG_TOKEN_SECRET" > .tg_token
+          fi
+          if [ -n "$TG_CHAT_SECRET" ]; then
+            echo "$TG_CHAT_SECRET" > .tg_chat
+          fi
+
+      - name: Run the dumper
+        working-directory: ${{ env.DUMPRX_DIR }}
+        run: |
+          ./dumper.sh '${{ inputs.firmware_url }}'
