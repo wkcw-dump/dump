@@ -30,7 +30,7 @@ jobs:
 
       - run: uv tool install xiaomi_flashable_firmware_creator
 
-      - run: curl -L --retry 5 --retry-delay 5 -o rom.zip "${{ inputs.rom_url }}"
+      - run: curl -L --retry 5 --retry-delay 5 -O "${{ inputs.rom_url }}"
 
       - id: tag
         run: |
@@ -38,11 +38,12 @@ jobs:
           CODENAME=$(echo "$FILENAME" | cut -d'_' -f1)
           REGION=$(echo "$FILENAME" | sed -E "s/^${CODENAME}_//; s/-ota.*//")
           DATE=$(date +%Y%m%d)
+          echo "filename=${FILENAME}.zip" >> "$GITHUB_OUTPUT"
           echo "name=fw-${CODENAME}-${REGION}-${DATE}" >> "$GITHUB_OUTPUT"
 
       - run: |
           mkdir -p output
-          xiaomi_flashable_firmware_creator -F rom.zip -o output
+          xiaomi_flashable_firmware_creator -F "${{ steps.tag.outputs.filename }}" -o output
 
       - uses: softprops/action-gh-release@v2
         with:
