@@ -7,10 +7,6 @@ on:
         description: "Direct URL to the MIUI/HyperOS ROM zip"
         required: true
         type: string
-      tag:
-        description: "Release tag name"
-        required: true
-        type: string
 
 jobs:
   build-firmware:
@@ -36,11 +32,19 @@ jobs:
 
       - run: curl -L --retry 5 --retry-delay 5 -o rom.zip "${{ inputs.rom_url }}"
 
+      - id: tag
+        run: |
+          FILENAME=$(basename "${{ inputs.rom_url }}" .zip)
+          CODENAME=$(echo "$FILENAME" | cut -d'_' -f1)
+          REGION=$(echo "$FILENAME" | sed -E "s/^${CODENAME}_//; s/-ota.*//")
+          DATE=$(date +%Y%m%d)
+          echo "name=fw-${CODENAME}-${REGION}-${DATE}" >> "$GITHUB_OUTPUT"
+
       - run: |
           mkdir -p output
           xiaomi_flashable_firmware_creator -F rom.zip -o output
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag }}
+          tag_name: ${{ steps.tag.outputs.name }}
           files: output/*.zip
