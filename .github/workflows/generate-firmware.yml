@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       rom_urls:
-        description: "ROM URLs, one per line"
+        description: "ROM URLs, separated by comma or semicolon"
         required: true
         type: string
 
@@ -17,10 +17,10 @@ jobs:
     steps:
       - id: set
         run: |
-          urls=$(echo "${{ inputs.rom_urls }}" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          urls=$(echo "${{ inputs.rom_urls }}" | jq -R -s -c 'split("[,;]+"; "g") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))')
           echo "matrix=$urls" >> "$GITHUB_OUTPUT"
 
-          FIRST_URL=$(echo "${{ inputs.rom_urls }}" | head -n1)
+          FIRST_URL=$(echo "$urls" | jq -r '.[0]')
           FILENAME=$(basename "$FIRST_URL" .zip)
           CODENAME=$(echo "$FILENAME" | cut -d'_' -f1)
           DATE=$(date +%Y%m%d)
