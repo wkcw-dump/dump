@@ -3,16 +3,39 @@ name: Generate Xiaomi Firmware
 on:
   workflow_dispatch:
     inputs:
-      rom_url:
-        description: "Direct URL to the MIUI/HyperOS ROM zip"
+      rom_urls:
+        description: "ROM URLs, one per line"
         required: true
         type: string
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+      tag: ${{ steps.set.outputs.tag }}
+    steps:
+      - id: set
+        run: |
+          urls=$(echo "${{ inputs.rom_urls }}" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "matrix=$urls" >> "$GITHUB_OUTPUT"
+
+          FIRST_URL=$(echo "${{ inputs.rom_urls }}" | head -n1)
+          FILENAME=$(basename "$FIRST_URL" .zip)
+          CODENAME=$(echo "$FILENAME" | cut -d'_' -f1)
+          DATE=$(date +%Y%m%d)
+          echo "tag=fw-${CODENAME}-${DATE}" >> "$GITHUB_OUTPUT"
+
   build-firmware:
+    needs: prepare
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        rom_url: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - uses: actions/setup-python@v5
         with:
@@ -30,22 +53,19 @@ jobs:
 
       - run: uv tool install xiaomi_flashable_firmware_creator
 
-      - run: curl -L --retry 5 --retry-delay 5 -O "${{ inputs.rom_url }}"
+      - run: curl -L --retry 5 --retry-delay 5 -O "${{ matrix.rom_url }}"
 
-      - id: tag
+      - id: name
         run: |
-          FILENAME=$(basename "${{ inputs.rom_url }}" .zip)
-          CODENAME=$(echo "$FILENAME" | cut -d'_' -f1)
-          REGION=$(echo "$FILENAME" | sed -E "s/^${CODENAME}_//; s/-ota.*//")
-          DATE=$(date +%Y%m%d)
+          FILENAME=$(basename "${{ matrix.rom_url }}" .zip)
           echo "filename=${FILENAME}.zip" >> "$GITHUB_OUTPUT"
-          echo "name=fw-${CODENAME}-${REGION}-${DATE}" >> "$GITHUB_OUTPUT"
 
       - run: |
           mkdir -p output
-          xiaomi_flashable_firmware_creator -F "${{ steps.tag.outputs.filename }}" -o output
+          xiaomi_flashable_firmware_creator -F "${{ steps.name.outputs.filename }}" -o output
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.name }}
+          tag_name: ${{ needs.prepare.outputs.tag }}
           files: output/*.zip
+          append_body: true
