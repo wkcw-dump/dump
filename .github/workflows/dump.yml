@@ -40,6 +40,12 @@ jobs:
           git clone --depth=1 https://github.com/DumprX/DumprX.git
           cd DumprX
           echo "DUMPRX_DIR=$(pwd)" >> "$GITHUB_ENV"
+          
+      - name: Install uv (provides uvx)
+        uses: astral-sh/setup-uv@v3
+        
+      - name: Install aospdtgen
+        run: uv tool install aospdtgen
 
       - name: Run setup.sh (install dependencies)
         working-directory: ${{ env.DUMPRX_DIR }}
