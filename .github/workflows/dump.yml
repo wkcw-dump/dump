@@ -7,6 +7,14 @@ on:
         description: 'Firmware link (direct link / mega.nz / mediafire / gdrive / androidfilehost)'
         required: true
         type: string
+      push_target:
+        description: 'Where to push the dump?'
+        required: false
+        default: 'github'
+        type: choice
+        options:
+          - github
+          - gitlab
 
 # Prevent two dumps from running at once and filling up disk
 concurrency:
@@ -58,19 +66,39 @@ jobs:
           git config --global user.name "heybyben"
           git config --global user.email "heybyben@gmail.com"
 
-      - name: Set up upload credentials (GitHub token & org)
+      - name: Set up upload credentials (GitHub / GitLab & Telegram)
         working-directory: ${{ env.DUMPRX_DIR }}
         env:
           GH_TOKEN_SECRET: ${{ secrets.DUMPER_GH_TOKEN }}
           GH_ORGNAME_SECRET: ${{ secrets.DUMPER_GH_ORGNAME }}
+          GL_TOKEN_SECRET: ${{ secrets.DUMPER_GL_TOKEN }}
+          GL_GROUP_SECRET: ${{ secrets.DUMPER_GL_GROUP }}
+          GL_INSTANCE_SECRET: ${{ secrets.DUMPER_GL_INSTANCE }}
           TG_TOKEN_SECRET: ${{ secrets.DUMPER_TG_TOKEN }}
           TG_CHAT_SECRET: ${{ secrets.DUMPER_TG_CHAT }}
+          PUSH_TARGET: ${{ inputs.push_target }}
         run: |
-          if [ -n "$GH_TOKEN_SECRET" ]; then
-            echo "$GH_TOKEN_SECRET" > .github_token
-          fi
-          if [ -n "$GH_ORGNAME_SECRET" ]; then
-            echo "$GH_ORGNAME_SECRET" > .github_orgname
+          if [ "$PUSH_TARGET" = "gitlab" ]; then
+            echo "Push target: GitLab"
+            if [ -n "$GL_TOKEN_SECRET" ]; then
+              echo "$GL_TOKEN_SECRET" > .gitlab_token
+            else
+              echo "::warning::DUMPER_GL_TOKEN is empty, GitLab push will fail"
+            fi
+            if [ -n "$GL_GROUP_SECRET" ]; then
+              echo "$GL_GROUP_SECRET" > .gitlab_group
+            fi
+            if [ -n "$GL_INSTANCE_SECRET" ]; then
+              echo "$GL_INSTANCE_SECRET" > .gitlab_instance
+            fi
+          else
+            echo "Push target: GitHub"
+            if [ -n "$GH_TOKEN_SECRET" ]; then
+              echo "$GH_TOKEN_SECRET" > .github_token
+            fi
+            if [ -n "$GH_ORGNAME_SECRET" ]; then
+              echo "$GH_ORGNAME_SECRET" > .github_orgname
+            fi
           fi
           if [ -n "$TG_TOKEN_SECRET" ]; then
             echo "$TG_TOKEN_SECRET" > .tg_token
@@ -82,4 +110,7 @@ jobs:
       - name: Run the dumper
         working-directory: ${{ env.DUMPRX_DIR }}
         run: |
+          if [ "${{ inputs.push_target }}" = "gitlab" ]; then
+            export PUSH_TO_GITLAB=true
+          fi
           ./dumper.sh '${{ inputs.firmware_url }}'
